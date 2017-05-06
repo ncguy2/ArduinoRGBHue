@@ -33,6 +33,7 @@ public class RGBForm {
     private JButton quadWipeBtn;
     private JSpinner spnDelay;
     private JButton btnclear;
+    private JButton closePortBtn;
     private SerialPort[] ports;
     private SerialPort activePort;
     private boolean enabled = false;
@@ -54,6 +55,7 @@ public class RGBForm {
             if(hasOpened) {
                 activePort.setComPortTimeouts(SerialPort.TIMEOUT_NONBLOCKING, 50, 50);
                 activePort.setBaudRate(9600);
+                closePortBtn.setEnabled(true);
                 EnableForm();
             }else{
                 System.err.println("Unable to open serial port");
@@ -65,6 +67,7 @@ public class RGBForm {
         timer = new Timer((int) (1000f / 16f), (e) -> Tick());
         timer.start();
 
+        inputArea.setFont(new Font("monospaced", Font.PLAIN, 12));
         inputArea.addKeyListener(new KeyAdapter() {
             @Override
             public void keyPressed(KeyEvent e) {
@@ -152,6 +155,12 @@ public class RGBForm {
             SubmitText(sb.toString(), true);
         });
         btnclear.addActionListener(e -> outputArea.setText(""));
+        closePortBtn.addActionListener(e -> {
+            if(activePort == null) return;
+            activePort.closePort();
+            activePort = null;
+            closePortBtn.setEnabled(false);
+        });
     }
 
     private void AppendColour(StringBuilder sb, Color c) {
