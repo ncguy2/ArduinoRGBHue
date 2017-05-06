@@ -42,9 +42,29 @@ public:
   }
 
   // Pixel functions
+
+  void SetPixelsColour(INT8* pixels, byte amt, RGB colour, INT8 wait) {
+    SetPixelsColour(pixels, amt, colour.ToLong(), wait);
+  }
+
+  void SetPixelsColour(INT8* pixels, byte amt, INT32 colour, INT8 wait) {
+    for(int i = 0; i < amt; i++)
+      strip.setPixelColor(pixels[amt], colour);
+    strip.show();
+    delay(wait);
+  }
   
   void SetPixelColour(INT16 pixel, INT32 colour, INT8 wait) {
     strip.setPixelColor(pixel, colour);
+    strip.show();
+    delay(wait);
+  }
+
+  void SetPixelColour_fast(INT16 pixel, INT32 colour) {
+    strip.setPixelColor(pixel, colour);
+  }
+
+  void ShowRing(INT8 wait) {
     strip.show();
     delay(wait);
   }

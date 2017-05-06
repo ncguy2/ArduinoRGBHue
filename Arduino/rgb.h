@@ -10,9 +10,9 @@ struct RGB {
   }
   RGB(int r, int g, int b) : r(r), g(g), b(b) {}
   
-  int r;
-  int g;
-  int b;
+  byte r;
+  byte g;
+  byte b;
 
   void Set(long col) {
     r = (col >> 16) & 0x0FF;
@@ -32,7 +32,6 @@ struct RGB {
     rgb = (rgb << 8) + g;
     rgb = (rgb << 8) + b;
     return rgb;
-//    return ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
   }
 };
 
