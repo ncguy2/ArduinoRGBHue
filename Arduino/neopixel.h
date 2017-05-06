@@ -3,10 +3,6 @@
 
 #include <Adafruit_NeoPixel.h>
 #include "rgb.h"
-#include "hsb.h"
-#include "interp.h"
-#include <StandardCplusplus.h>
-#include <vector>
 
 #ifndef INT8
 #define INT8 uint8_t
@@ -20,6 +16,10 @@
 #define INT32 uint32_t
 #endif // INT32
 
+#ifndef ASFLOAT
+#define ASFLOAT(var) ((float)var)
+#endif
+
 class NeoPixel {
 public:
   NeoPixel(const int pin, const int pixelCount) : pin(pin), pixelCount(pixelCount),
@@ -31,7 +31,13 @@ public:
   }
 
   // Helper functions
-  INT32 BuildPixelColour(int r, int g, int b) {
+  INT32 BuildPixelColour(int r, int g, int b, float intensity = 1.0) {
+    return strip.Color(r * intensity, g * intensity, b * intensity);
+  }
+  INT32 BuildPixelColour(int ar, int ag, int ab, int br, int bg, int bb, float intensity = 1.0) {
+    int r = ar + (br - ar) * intensity;
+    int g = ag + (bg - ag) * intensity;
+    int b = ab + (bb - ab) * intensity;
     return strip.Color(r, g, b);
   }
 
@@ -39,6 +45,14 @@ public:
   
   void SetPixelColour(INT16 pixel, INT32 colour, INT8 wait) {
     strip.setPixelColor(pixel, colour);
+    strip.show();
+    delay(wait);
+  }
+  
+  void SetRingColour(INT32 colour, INT8 wait) {
+    for(INT16 i = 0; i < pixelCount; i++) {
+      strip.setPixelColor(i, colour);
+    }
     strip.show();
     delay(wait);
   }
@@ -60,6 +74,52 @@ public:
     }
   }
 
+  void ColourWorm(RGB colour, INT8 len, INT8 wait) {
+    if(len <= 0) len = 1;
+    float diff = 0.f;
+    for(INT16 i = 0; i < pixelCount; i++) {
+      this->SetPixelColour(i, BuildPixelColour(colour.r, colour.g, colour.b), 0);
+      for(INT16 j = 0; j <= len; j++) {
+        int pixel = (i - j);
+        if(pixel < 0) continue;
+        diff = 1.f - ASFLOAT(ASFLOAT(j) / ASFLOAT(len));
+        this->SetPixelColour(pixel, BuildPixelColour(colour.r, colour.g, colour.b, diff), 0);
+      }
+      delay(wait);
+    }
+  }
+
+  void ColourWormBG(RGB colour, RGB bgColour, INT8 len, INT8 wait, void* (*callback)(NeoPixel&) = nullptr) {
+    if(len <= 0) len = 1;
+    float diff = 0.f;
+    for(INT16 i = 0; i < pixelCount; i++) {
+      this->SetPixelColour(i, BuildPixelColour(colour.r, colour.g, colour.b), 0);
+      for(INT16 j = 0; j <= len; j++) {
+        int pixel = (i - j);
+        if(pixel < 0) pixel += pixelCount;
+        diff = ASFLOAT(ASFLOAT(j) / ASFLOAT(len));
+        this->SetPixelColour(pixel, BuildPixelColour(colour.r, colour.g, colour.b, bgColour.r, bgColour.g, bgColour.b, diff), 0);
+      }
+      delay(wait);
+    }
+    if(callback != nullptr) 
+      callback(*this);
+  }
+
+  void ColourWormBG_Stepped(RGB colour, RGB bgColour, INT8 len, INT8 wait, INT8 i) {
+    if(len <= 0) len = 1;
+    i %= pixelCount;
+    float diff = 0.f;
+    this->SetPixelColour(i, BuildPixelColour(colour.r, colour.g, colour.b), 0);
+    for(INT16 j = 0; j <= len; j++) {
+      int pixel = (i - j);
+      if(pixel < 0) pixel += pixelCount;
+      diff = ASFLOAT(ASFLOAT(j) / ASFLOAT(len));
+      this->SetPixelColour(pixel, BuildPixelColour(colour.r, colour.g, colour.b, bgColour.r, bgColour.g, bgColour.b, diff), 0);
+    }
+    delay(wait);
+  }
+
   void DualWipe(INT32 colourA, INT32 colourB, INT8 wait) {
     int dualOffset = pixelCount * 0.5f;
     for(INT16 i = 0; i < pixelCount; i++) {
@@ -67,6 +127,14 @@ public:
       this->SetPixelColour((i + dualOffset) % pixelCount, colourB, 0);
       delay(wait);
     }
+  }
+
+  void DualWipe_Stepped(INT32 colourA, INT32 colourB, INT8 wait, INT8 i) {
+    i %= pixelCount;
+    int dualOffset = pixelCount * 0.5f;
+    this->SetPixelColour(i, colourA, 0);
+    this->SetPixelColour((i + dualOffset) % pixelCount, colourB, 0);
+    delay(wait);
   }
 
   void TriWipe(INT32 colourA, INT32 colourB, INT32 colourC, INT8 wait) {
@@ -81,6 +149,16 @@ public:
     }
   }
 
+  void TriWipe_Stepped(INT32 colourA, INT32 colourB, INT32 colourC, INT8 wait, INT8 i) {
+    i %= pixelCount;
+    int triOffsetA = pixelCount / 3;
+    int triOffsetB = triOffsetA * 2;
+    this->SetPixelColour(i, colourA, 0);
+    this->SetPixelColour((i + triOffsetA) % pixelCount, colourB, 0);
+    this->SetPixelColour((i + triOffsetB) % pixelCount, colourC, 0);
+    delay(wait);
+  }
+
   void QuadWipe(INT32 colourA, INT32 colourB, INT32 colourC, INT32 colourD, INT8 wait) {
     int quadOffsetA = pixelCount  * 0.25f;
     int quadOffsetB = quadOffsetA * 2;
@@ -93,6 +171,18 @@ public:
       this->SetPixelColour((i + quadOffsetC) % pixelCount, colourD, 0);
       delay(wait);
     }
+  }
+
+  void QuadWipe_Stepped(INT32 colourA, INT32 colourB, INT32 colourC, INT32 colourD, INT8 wait, INT8 i) {
+    i %= pixelCount;
+    int quadOffsetA = pixelCount  * 0.25f;
+    int quadOffsetB = quadOffsetA * 2;
+    int quadOffsetC = quadOffsetA * 3;
+    this->SetPixelColour(i, colourA, 0);
+    this->SetPixelColour((i + quadOffsetA) % pixelCount, colourB, 0);
+    this->SetPixelColour((i + quadOffsetB) % pixelCount, colourC, 0);
+    this->SetPixelColour((i + quadOffsetC) % pixelCount, colourD, 0);
+    delay(wait);
   }
 
   void Rainbow(INT8 wait) {
@@ -133,6 +223,7 @@ public:
         }
       }
     }
+    
   }
 
   void theaterChaseRainbow(INT8 wait) {

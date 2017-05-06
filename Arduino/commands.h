@@ -3,10 +3,8 @@
 
 #include <StandardCplusplus.h>
 #include <map>
-#include <memory>
 #include "neopixel.h"
-
-#define INPUT_SIZE 50
+#include "rgb.h"
 
 #ifndef CMD_PROTO
 #define CMD_PROTO String args, NeoPixel& neopixel, CommandManager& mgr
@@ -27,7 +25,12 @@ public:
     RegisterCommand("cmds", [](CMD_PROTO) {
       Serial.println("Registered Commands: ");
       for(auto cmd : mgr.cmds) {
+        Serial.print("    ");
         Serial.println(cmd.first);
+//        int l = 24 - cmd.first.length();
+//        for(int i = 0; i < l; i++) Serial.print(" ");
+//        Serial.print("| ");
+//        Serial.println(cmd.second.description);
       }
     });
     RegisterCommand("set", [](CMD_PROTO) {
@@ -36,15 +39,7 @@ public:
       int g = atoi(mgr.GetValue(args, ' ', 3).c_str());
       int b = atoi(mgr.GetValue(args, ' ', 4).c_str());
       int wait = atoi(mgr.GetValue(args, ' ', 5, "50").c_str());
-      Serial.print("Setting pixel at ");
-      Serial.print(id);
-      Serial.print(" to colour [");
-      Serial.print(r);
-      Serial.print(", ");
-      Serial.print(g);
-      Serial.print(", ");
-      Serial.print(b);
-      Serial.println("]");
+      InstructionManager::GetInstance().ClearInstruction();
       neopixel.SetPixelColour(id, r, g, b, wait);
     });
     RegisterCommand("wipe", [](CMD_PROTO) {
@@ -52,6 +47,7 @@ public:
       int g = atoi(mgr.GetValue(args, ' ', 2).c_str());
       int b = atoi(mgr.GetValue(args, ' ', 3).c_str());
       int wait = atoi(mgr.GetValue(args, ' ', 4, "50").c_str());
+      InstructionManager::GetInstance().ClearInstruction();
       neopixel.ColourWipe(BUILD_COLOUR(r, g, b), wait);
     });
     RegisterCommand("wipe-offset", [](CMD_PROTO) {
@@ -60,6 +56,7 @@ public:
       int g = atoi(mgr.GetValue(args, ' ', 3).c_str());
       int b = atoi(mgr.GetValue(args, ' ', 4).c_str());
       int wait = atoi(mgr.GetValue(args, ' ', 5, "50").c_str());
+      InstructionManager::GetInstance().ClearInstruction();
       neopixel.ColourWipeOffset(BUILD_COLOUR(r, g, b), offset, wait);
     });
     RegisterCommand("dual-wipe", [](CMD_PROTO) {
@@ -70,6 +67,7 @@ public:
       int bg = atoi(mgr.GetValue(args, ' ', 5).c_str());
       int bb = atoi(mgr.GetValue(args, ' ', 6).c_str());
       int wait = atoi(mgr.GetValue(args, ' ', 7, "50").c_str());
+      InstructionManager::GetInstance().ClearInstruction();
       neopixel.DualWipe(BUILD_COLOUR(ar, ag, ab), BUILD_COLOUR(br, bg, bb), wait);
     });
     RegisterCommand("tri-wipe", [](CMD_PROTO) {
@@ -83,6 +81,7 @@ public:
       int cg = atoi(mgr.GetValue(args, ' ', 8).c_str());
       int cb = atoi(mgr.GetValue(args, ' ', 9).c_str());
       int wait = atoi(mgr.GetValue(args, ' ', 10, "50").c_str());
+      InstructionManager::GetInstance().ClearInstruction();
       neopixel.TriWipe(BUILD_COLOUR(ar, ag, ab), BUILD_COLOUR(br, bg, bb), BUILD_COLOUR(cr, cg, cb), wait);
     });
     RegisterCommand("quad-wipe", [](CMD_PROTO) {
@@ -99,7 +98,125 @@ public:
       int dg = atoi(mgr.GetValue(args, ' ', 11).c_str());
       int db = atoi(mgr.GetValue(args, ' ', 12).c_str());
       int wait = atoi(mgr.GetValue(args, ' ', 13, "50").c_str());
+      InstructionManager::GetInstance().ClearInstruction();
       neopixel.QuadWipe(BUILD_COLOUR(ar, ag, ab), BUILD_COLOUR(br, bg, bb), BUILD_COLOUR(cr, cg, cb), BUILD_COLOUR(dr, dg, db), wait);
+    });
+    RegisterCommand("worm", [](CMD_PROTO) {
+      int len = atoi(mgr.GetValue(args, ' ', 1).c_str());
+      int ar = atoi(mgr.GetValue(args, ' ', 2).c_str());
+      int ag = atoi(mgr.GetValue(args, ' ', 3).c_str());
+      int ab = atoi(mgr.GetValue(args, ' ', 4).c_str());
+      int wait = atoi(mgr.GetValue(args, ' ', 5, "50").c_str());
+      InstructionManager::GetInstance().ClearInstruction();
+      neopixel.ColourWorm(RGB(ar, ag, ab), len, wait);
+    });
+    RegisterCommand("wormbg", [](CMD_PROTO) {
+      int len = atoi(mgr.GetValue(args, ' ', 1).c_str());
+      int ar = atoi(mgr.GetValue(args, ' ', 2).c_str());
+      int ag = atoi(mgr.GetValue(args, ' ', 3).c_str());
+      int ab = atoi(mgr.GetValue(args, ' ', 4).c_str());
+      int br = atoi(mgr.GetValue(args, ' ', 5).c_str());
+      int bg = atoi(mgr.GetValue(args, ' ', 6).c_str());
+      int bb = atoi(mgr.GetValue(args, ' ', 7).c_str());
+      int wait = atoi(mgr.GetValue(args, ' ', 8, "50").c_str());
+      InstructionManager::GetInstance().ClearInstruction();
+      neopixel.ColourWormBG(RGB(ar, ag, ab), RGB(br, bg, bb), len, wait);
+    });
+
+    RegisterCommand("clean", [](CMD_PROTO) {
+      InstructionManager::GetInstance().ClearInstruction();
+      neopixel.SetRingColour(neopixel.BuildPixelColour(0, 0, 0), 0);
+    });
+
+    RegisterCommand("rainbow", [](CMD_PROTO) {
+      int wait = atoi(mgr.GetValue(args, ' ', 1, "50").c_str());
+      neopixel.Rainbow(wait);
+    });
+    RegisterCommand("rainbow-cycle", [](CMD_PROTO) {
+      int wait = atoi(mgr.GetValue(args, ' ', 1, "50").c_str());
+      neopixel.RainbowCycle(wait);
+    });
+    RegisterCommand("theater-chase", [](CMD_PROTO) {
+      int ar = atoi(mgr.GetValue(args, ' ', 1).c_str());
+      int ag = atoi(mgr.GetValue(args, ' ', 2).c_str());
+      int ab = atoi(mgr.GetValue(args, ' ', 3).c_str());
+      int wait = atoi(mgr.GetValue(args, ' ', 4, "50").c_str());
+      neopixel.TheaterChase(BUILD_COLOUR(ar, ag, ab), wait);
+    });
+    RegisterCommand("theater-chase-rainbow", [](CMD_PROTO) {
+      int wait = atoi(mgr.GetValue(args, ' ', 1, "50").c_str());
+      neopixel.theaterChaseRainbow(wait);
+    });
+    
+
+    // Instruction-related commands
+    RegisterCommand("instruction_remove", [](CMD_PROTO) {
+      InstructionManager::GetInstance().ClearInstruction();
+    });
+    RegisterCommand("instruction_spin", [](CMD_PROTO) {
+      int len = atoi(mgr.GetValue(args, ' ', 1).c_str());
+      int ar = atoi(mgr.GetValue(args, ' ', 2).c_str());
+      int ag = atoi(mgr.GetValue(args, ' ', 3).c_str());
+      int ab = atoi(mgr.GetValue(args, ' ', 4).c_str());
+      int br = atoi(mgr.GetValue(args, ' ', 5).c_str());
+      int bg = atoi(mgr.GetValue(args, ' ', 6).c_str());
+      int bb = atoi(mgr.GetValue(args, ' ', 7).c_str());
+      int wait = atoi(mgr.GetValue(args, ' ', 8, "50").c_str());
+      InstructionManager::GetInstance().SetInstruction(new WormSpinInstruction(RGB(ar, ag, ab), RGB(br, bg, bb), len, wait));
+    });
+    RegisterCommand("instruction_wipe", [](CMD_PROTO) {
+      int ar = atoi(mgr.GetValue(args, ' ', 1).c_str());
+      int ag = atoi(mgr.GetValue(args, ' ', 2).c_str());
+      int ab = atoi(mgr.GetValue(args, ' ', 3).c_str());
+      int br = atoi(mgr.GetValue(args, ' ', 4).c_str());
+      int bg = atoi(mgr.GetValue(args, ' ', 5).c_str());
+      int bb = atoi(mgr.GetValue(args, ' ', 6).c_str());
+      int wait = atoi(mgr.GetValue(args, ' ', 7, "50").c_str());
+      InstructionManager::GetInstance().SetInstruction(new WipeInstruction(neopixel.BuildPixelColour(ar, ag, ab), neopixel.BuildPixelColour(br, bg, bb), wait));
+    });
+    RegisterCommand("instruction_tri-wipe", [](CMD_PROTO) {
+      int ar = atoi(mgr.GetValue(args, ' ', 1).c_str());
+      int ag = atoi(mgr.GetValue(args, ' ', 2).c_str());
+      int ab = atoi(mgr.GetValue(args, ' ', 3).c_str());
+      int br = atoi(mgr.GetValue(args, ' ', 4).c_str());
+      int bg = atoi(mgr.GetValue(args, ' ', 5).c_str());
+      int bb = atoi(mgr.GetValue(args, ' ', 6).c_str());
+      int cr = atoi(mgr.GetValue(args, ' ', 7).c_str());
+      int cg = atoi(mgr.GetValue(args, ' ', 8).c_str());
+      int cb = atoi(mgr.GetValue(args, ' ', 9).c_str());
+      int wait = atoi(mgr.GetValue(args, ' ', 10, "50").c_str());
+      InstructionManager::GetInstance().SetInstruction(new TriWipeInstruction(BUILD_COLOUR(ar, ag, ab), BUILD_COLOUR(br, bg, bb), BUILD_COLOUR(cr, cg, cb), wait));
+    });
+    RegisterCommand("instruction_quad-wipe", [](CMD_PROTO) {
+      int ar = atoi(mgr.GetValue(args, ' ', 1).c_str());
+      int ag = atoi(mgr.GetValue(args, ' ', 2).c_str());
+      int ab = atoi(mgr.GetValue(args, ' ', 3).c_str());
+      int br = atoi(mgr.GetValue(args, ' ', 4).c_str());
+      int bg = atoi(mgr.GetValue(args, ' ', 5).c_str());
+      int bb = atoi(mgr.GetValue(args, ' ', 6).c_str());
+      int cr = atoi(mgr.GetValue(args, ' ', 7).c_str());
+      int cg = atoi(mgr.GetValue(args, ' ', 8).c_str());
+      int cb = atoi(mgr.GetValue(args, ' ', 9).c_str());
+      int dr = atoi(mgr.GetValue(args, ' ', 10).c_str());
+      int dg = atoi(mgr.GetValue(args, ' ', 11).c_str());
+      int db = atoi(mgr.GetValue(args, ' ', 12).c_str());
+      int wait = atoi(mgr.GetValue(args, ' ', 13, "50").c_str());
+      InstructionManager::GetInstance().SetInstruction(new QuadWipeInstruction(BUILD_COLOUR(ar, ag, ab), BUILD_COLOUR(br, bg, bb), BUILD_COLOUR(cr, cg, cb), BUILD_COLOUR(dr, dg, db), wait));
+    });
+
+    // Realtime-maintenance
+    RegisterCommand("serial_timeout", [](CMD_PROTO) {
+      int newTimeout = atoi(mgr.GetValue(args, ' ', 1, "-1").c_str());
+      if(newTimeout < SERIAL_TIMEOUT) {
+        Serial.print("Provided timeout is lower than the minimum allowed, must be greater than ");
+        Serial.print(SERIAL_TIMEOUT);
+        Serial.println(".");
+        return;
+      }else{
+        Serial.print("Setting serial timeout to ");
+        Serial.println(newTimeout);
+        Serial.setTimeout(newTimeout);
+      }
     });
   }
 

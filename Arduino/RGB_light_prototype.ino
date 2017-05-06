@@ -7,31 +7,24 @@ byte mac[] = { MAC_ADDRESS };
 IPAddress ip(IP_ADDRESS);
 #endif
 
-#include "rgb.h"
-#include "led.h"
-#include "instructions.h"
 #include "neopixel.h"
+#include "instructions.h"
 
-//LED led(RED_PIN, GREEN_PIN, BLUE_PIN);
-NeoPixel neopixel(3, 12);
+NeoPixel neopixel(NEOPIXEL_PIN, NEOPIXEL_PIXELS);
 
 #include CONTROL_TYPE_SRC
 CONTROL_TYPE controller;
-//InstructionManager instMgr;
 
 void setup() {
   Serial.begin(9600);
-  Serial.setTimeout(50);
-//  led.Init();
+  Serial.setTimeout(SERIAL_TIMEOUT);
   neopixel.Init();
-//  instMgr.SetInstruction(new TwoColourFade(0, 360));
 }
 
 void loop() {
   if(controller.IsAvailable()) 
     controller.ExecuteNeoPixel(neopixel);
-//  instMgr.Update(led);
-//  led.Update();
+  InstructionManager::GetInstance().Update(neopixel);
 }
 
 
