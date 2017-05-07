@@ -1,5 +1,6 @@
 package net.ncguy.serialui.factory;
 
+import net.ncguy.serialui.RGBForm;
 import net.ncguy.serialui.cmd.BaseCommand;
 
 import javax.swing.*;
@@ -9,6 +10,17 @@ import javax.swing.*;
  */
 public abstract class BaseCommandFactory<T extends BaseCommand> {
 
-    abstract JPanel BuildUI();
+    public RGBForm host;
 
+    public BaseCommandFactory(RGBForm host) {
+        this.host = host;
+    }
+
+    public abstract String Name();
+    public abstract JPanel BuildUI();
+
+    @Override
+    public String toString() {
+        return Name();
+    }
 }

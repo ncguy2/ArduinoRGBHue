@@ -8,7 +8,10 @@
 #include <SPI.h>
 #include <Ethernet.h>
 byte mac[] = { MAC_ADDRESS };
-//IPAddress ip(IP_ADDRESS);
+IPAddress ip(IP_ADDRESS);
+IPAddress myDns(DNS_ADDRESS);
+IPAddress gateway(GATEWAY_ADDRESS);
+IPAddress subnet(SUBNET_ADDRESS);
 
 #ifndef COMMAND_IDS
 #define COMMAND_IDS
@@ -47,7 +50,8 @@ public:
     Serial.println("Attempting to connect through DHCP");
     if(Ethernet.begin(mac) == 0) {
       Serial.println("Failed to configure Ethernet using DHCP");
-      while(true);
+      Ethernet.begin(mac, ip, myDns, gateway, subnet);
+      Serial.println("Using default network settings");
     }
     svr.begin();
     Serial.print("Server address: ");

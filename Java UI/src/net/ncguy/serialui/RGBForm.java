@@ -1,6 +1,10 @@
 package net.ncguy.serialui;
 
 import com.fazecast.jSerialComm.SerialPort;
+import net.ncguy.serialui.cmd.Command;
+import net.ncguy.serialui.factory.BaseCommandFactory;
+import net.ncguy.serialui.factory.PulseCommandFactory;
+import org.reflections.Reflections;
 
 import javax.swing.*;
 import java.awt.*;
@@ -8,10 +12,13 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Set;
 
 /**
  * Created by Guy on 05/05/2017.
@@ -251,9 +258,31 @@ public class RGBForm {
         });
 
         // TODO populate list with command factories
-//        cmdList.setListData();
+        Reflections ref = new Reflections();
+        Set<Class<? extends BaseCommandFactory>> subTypesOf = ref.getSubTypesOf(BaseCommandFactory.class);
+        ArrayList<BaseCommandFactory> factories = new ArrayList<>();
+        subTypesOf.forEach(cls -> {
+            try {
+                Constructor<? extends BaseCommandFactory> ctor = cls.getConstructor(RGBForm.class);
+                if(ctor != null)
+                    factories.add(ctor.newInstance(RGBForm.this));
+            } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException | InstantiationException e) {
+                e.printStackTrace();
+            }
+        });
+//        factories.add(new PulseCommandFactory(this));
+//        factories.add(new PulseCommandFactory(this));
+        BaseCommandFactory[] fs = new BaseCommandFactory[factories.size()];
+        factories.toArray(fs);
+        cmdList.setListData(fs);
         cmdList.addListSelectionListener(e -> {
-
+            BaseCommandFactory factory = (BaseCommandFactory) cmdList.getSelectedValue();
+            try{
+                dynamicPropsField.removeAll();
+            }catch (Exception ignored) {}
+            JPanel ui = factory.BuildUI();
+            dynamicPropsField.setLayout(new BorderLayout());
+            dynamicPropsField.add(ui, BorderLayout.CENTER);
         });
     }
 
@@ -315,6 +344,10 @@ public class RGBForm {
 
     public void SendCommandPayload(String target, CommandPayload payload) throws IOException {
         executePost(target, payload.prepare());
+    }
+
+    public void SendCommandPayload(CommandPayload payload) throws IOException {
+        executePost(hostField.getText(), payload.prepare());
     }
 
     public ArrayList<InetAddress> DiscoverHosts() {
