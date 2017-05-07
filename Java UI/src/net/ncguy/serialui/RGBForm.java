@@ -266,7 +266,11 @@ public class RGBForm {
                 Constructor<? extends BaseCommandFactory> ctor = cls.getConstructor(RGBForm.class);
                 if(ctor != null)
                     factories.add(ctor.newInstance(RGBForm.this));
-            } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException | InstantiationException e) {
+            } catch (NoSuchMethodException | IllegalAccessException e) {
+                e.printStackTrace();
+            } catch (InstantiationException e) {
+                e.printStackTrace();
+            } catch (InvocationTargetException e) {
                 e.printStackTrace();
             }
         });
@@ -283,6 +287,7 @@ public class RGBForm {
             JPanel ui = factory.BuildUI();
             dynamicPropsField.setLayout(new BorderLayout());
             dynamicPropsField.add(ui, BorderLayout.CENTER);
+            dynamicPropsField.updateUI();
         });
     }
 
@@ -343,11 +348,13 @@ public class RGBForm {
     }
 
     public void SendCommandPayload(String target, CommandPayload payload) throws IOException {
-        executePost(target, payload.prepare());
+        String prepared = payload.prepare();
+        System.out.println(prepared);
+        executePost(target, prepared);
     }
 
     public void SendCommandPayload(CommandPayload payload) throws IOException {
-        executePost(hostField.getText(), payload.prepare());
+        SendCommandPayload(hostField.getText(), payload);
     }
 
     public ArrayList<InetAddress> DiscoverHosts() {

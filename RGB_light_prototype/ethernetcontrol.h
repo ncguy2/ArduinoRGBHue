@@ -25,6 +25,13 @@ IPAddress subnet(SUBNET_ADDRESS);
 #define CMD_TRIWIPE 7
 #define CMD_QUADWIPE 8
 
+#define CMD_INSTRUCTION_START 10
+#define CMD_INSTRUCTION_WORM 11
+#define CMD_INSTRUCTION_DUALWIPE 12
+#define CMD_INSTRUCTION_TRIWIPE 13
+#define CMD_INSTRUCTION_QUADWIPE 14
+#define CMD_INSTRUCTION_END 15
+
 #endif
 
 struct CommandPayload {
@@ -96,6 +103,8 @@ public:
   }
 
   void ExecuteNeoPixel(NeoPixel& neopixel) {
+    if(payload.commandId < CMD_INSTRUCTION_START || payload.commandId > CMD_INSTRUCTION_END)
+      InstructionManager::GetInstance().ClearInstruction();
     switch(payload.commandId) {
       case CMD_SET:
         for(int i = 0; i < payload.maskedPins; i++)
@@ -129,6 +138,18 @@ public:
         break;
       case CMD_QUADWIPE:
         neopixel.QuadWipe(payload.colours[0].ToLong(), payload.colours[1].ToLong(), payload.colours[2].ToLong(), payload.colours[3].ToLong(), payload.wait);
+        break;
+      case CMD_INSTRUCTION_WORM:
+        InstructionManager::GetInstance().SetInstruction(new WormSpinInstruction(payload.colours[0].ToLong(), payload.colours[1].ToLong(), payload.colours[2].r, payload.wait));
+        break;
+      case CMD_INSTRUCTION_DUALWIPE:
+        InstructionManager::GetInstance().SetInstruction(new WipeInstruction(payload.colours[0].ToLong(), payload.colours[1].ToLong(), payload.wait));
+        break;
+      case CMD_INSTRUCTION_TRIWIPE:
+        InstructionManager::GetInstance().SetInstruction(new TriWipeInstruction(payload.colours[0].ToLong(), payload.colours[1].ToLong(), payload.colours[2].ToLong(), payload.wait));
+        break;
+      case CMD_INSTRUCTION_QUADWIPE:
+        InstructionManager::GetInstance().SetInstruction(new QuadWipeInstruction(payload.colours[0].ToLong(), payload.colours[1].ToLong(), payload.colours[2].ToLong(), payload.colours[3].ToLong(), payload.wait));
         break;
       default:
         Serial.print("Unrecognised command, ID: ");

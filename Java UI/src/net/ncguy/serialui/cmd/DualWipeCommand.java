@@ -15,7 +15,7 @@ public class DualWipeCommand implements BaseCommand {
 
     @Override
     public RGBForm.CommandPayload PreparePayload(int[] data) {
-        RGBForm.CommandPayload payload = new RGBForm.CommandPayload((byte) 6);
+        RGBForm.CommandPayload payload = new RGBForm.CommandPayload(CMD_DUALWIPE);
         payload.colours[0] = new Color(data[0], data[1], data[2]);
         payload.colours[1] = new Color(data[3], data[4], data[5]);
         payload.wait = (short) data[6];

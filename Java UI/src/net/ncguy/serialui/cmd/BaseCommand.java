@@ -19,4 +19,9 @@ public interface BaseCommand {
     public static final byte CMD_TRIWIPE = 7;
     public static final byte CMD_QUADWIPE = 8;
 
+    public static final byte CMD_INSTRUCTION_WORM = 11;
+    public static final byte CMD_INSTRUCTION_DUALWIPE = 12;
+    public static final byte CMD_INSTRUCTION_TRIWIPE = 13;
+    public static final byte CMD_INSTRUCTION_QUADWIPE = 14;
+
 }

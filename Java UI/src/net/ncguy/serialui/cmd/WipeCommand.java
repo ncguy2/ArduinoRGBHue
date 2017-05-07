@@ -15,7 +15,7 @@ public class WipeCommand implements BaseCommand {
 
     @Override
     public RGBForm.CommandPayload PreparePayload(int[] data) {
-        RGBForm.CommandPayload payload = new RGBForm.CommandPayload((byte) 5);
+        RGBForm.CommandPayload payload = new RGBForm.CommandPayload(CMD_WIPE);
         payload.colours[0] = new Color(data[0], data[1], data[2]);
         payload.wait = (short) data[3];
         return payload;

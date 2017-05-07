@@ -17,6 +17,6 @@
 #define SERIAL_TIMEOUT 25
 #define ETHERNET_PORT 3300
 #define MAX_BUFFER_SIZE 256
-#define VERBOSE_LOG false
+#define VERBOSE_LOG true
 
 #endif // CONFIG_H
