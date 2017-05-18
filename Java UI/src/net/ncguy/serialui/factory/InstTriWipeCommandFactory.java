@@ -2,6 +2,7 @@ package net.ncguy.serialui.factory;
 
 import net.ncguy.serialui.RGBForm;
 import net.ncguy.serialui.cmd.InstWormCommand;
+import net.ncguy.serialui.factory.forms.instructions.InstTriWipeCommandForm;
 
 import javax.swing.*;
 

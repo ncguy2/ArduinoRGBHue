@@ -18,14 +18,19 @@ struct RGB {
     r = (col >> 16) & 0x0FF;
     g = (col >> 8) & 0x0FF;
     b = col & 0x0FF;
-    Serial.print("Setting colour to: ");
-    Serial.println(col);
   }
 
   RGB operator=(long col) {
     Set(col);
     return *this;
   }
+
+    RGB operator*=(float scalar) {
+      r *= scalar;
+      g *= scalar;
+      b *= scalar;
+      return  *this;
+    }
 
   long ToLong() {
     long rgb = r;

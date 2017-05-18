@@ -17,5 +17,14 @@
       </library>
     </orderEntry>
     <orderEntry type="library" name="org.reflections:reflections:0.9.11" level="project" />
+    <orderEntry type="module-library">
+      <library>
+        <CLASSES>
+          <root url="jar://$MODULE_DIR$/lib/darcula.jar!/" />
+        </CLASSES>
+        <JAVADOC />
+        <SOURCES />
+      </library>
+    </orderEntry>
   </component>
 </module>

@@ -104,5 +104,33 @@ protected:
   uint32_t colD;
 };
 
+class BreathingInstruction : public Instruction {
+public:
+    BreathingInstruction(RGB colour, float speed = 1.f) : colour(colour), speedScale(speed * 0.1f) {}
+    void Update(NeoPixel& neoPixel, float delta) override {
+      delta /= speedScale;
+      if(!ascend) delta = -delta;
+      value += delta;
+
+      if(value >= 1.f) {
+        value = 1.f;
+        ascend = false;
+      }else if(value <= 0.f) {
+        value = 0.f;
+        ascend = true;
+      }
+
+      RGB col(colour);
+      col *= value;
+      neoPixel.SetRingColour(col.ToLong(), 0);
+    }
+
+protected:
+    float value = 1.f;
+    float speedScale = 1.f;
+    bool ascend = false;
+    RGB colour;
+};
+
 #endif // INSTRUCTIONS_H
 

@@ -1,9 +1,8 @@
 package net.ncguy.serialui;
 
 import com.fazecast.jSerialComm.SerialPort;
-import net.ncguy.serialui.cmd.Command;
+import net.ncguy.serialui.cmd.BaseCommand;
 import net.ncguy.serialui.factory.BaseCommandFactory;
-import net.ncguy.serialui.factory.PulseCommandFactory;
 import org.reflections.Reflections;
 
 import javax.swing.*;
@@ -14,10 +13,11 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
-import java.net.InetAddress;
-import java.net.Socket;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -58,13 +58,22 @@ public class RGBForm {
     private JButton btnSetPixelRange;
     private JList cmdList;
     private JPanel dynamicPropsField;
-    private JList<InetAddress> hostList;
+    private JList<InetAddressWrapper> discoveredHostList;
+    private JButton discoverHostsBtn;
+    private JScrollPane discoveredHostList_Container;
+    private JList discover_CmdList;
+    private JPanel discover_CmdPanel;
+    private JTabbedPane TabControl;
     private JButton findHostsBtn;
     private SerialPort[] ports;
     private SerialPort activePort;
     private boolean enabled = false;
 
+    private Set<InetAddressWrapper> discoveredHosts = new LinkedHashSet<>();
+
     public static final int PIXELCOUNT = 12;
+    public static final int PORT = 3300;
+    public static final boolean USE_TCP = false;
 
     Timer timer;
 
@@ -207,7 +216,6 @@ public class RGBForm {
             byte cmd = 1;
             CommandPayload payload = new CommandPayload(cmd);
             payload.SetColour(0, r, g, b);
-            payload.SetPinMask(true, pixel);
             try {
                 SendCommandPayload(hostField.getText(), payload);
             } catch (IOException e1) {
@@ -238,10 +246,6 @@ public class RGBForm {
             }
             range.add(end);
 
-            int[] pins = new int[range.size()];
-            for(int i = 0; i < range.size(); i++)
-                pins[i] = range.get(i);
-
             Color col = pixelRangeColourBG.getBackground();
             int r = col.getRed();
             int g = col.getGreen();
@@ -249,7 +253,6 @@ public class RGBForm {
             byte cmd = 1;
             CommandPayload payload = new CommandPayload(cmd);
             payload.SetColour(0, r, g, b);
-            payload.SetPinMask(true, pins);
             try {
                 SendCommandPayload(hostField.getText(), payload);
             } catch (IOException e1) {
@@ -274,11 +277,14 @@ public class RGBForm {
                 e.printStackTrace();
             }
         });
+
+        discoveredHostList.setModel(new DefaultListModel<>());
 //        factories.add(new PulseCommandFactory(this));
 //        factories.add(new PulseCommandFactory(this));
         BaseCommandFactory[] fs = new BaseCommandFactory[factories.size()];
         factories.toArray(fs);
         cmdList.setListData(fs);
+        discover_CmdList.setListData(fs);
         cmdList.addListSelectionListener(e -> {
             BaseCommandFactory factory = (BaseCommandFactory) cmdList.getSelectedValue();
             try{
@@ -289,6 +295,17 @@ public class RGBForm {
             dynamicPropsField.add(ui, BorderLayout.CENTER);
             dynamicPropsField.updateUI();
         });
+        discover_CmdList.addListSelectionListener(e -> {
+            BaseCommandFactory factory = (BaseCommandFactory) discover_CmdList.getSelectedValue();
+            try{
+                discover_CmdPanel.removeAll();
+            }catch (Exception ignored) {}
+            JPanel ui = factory.BuildUI();
+            discover_CmdPanel.setLayout(new BorderLayout());
+            discover_CmdPanel.add(ui, BorderLayout.CENTER);
+            discover_CmdPanel.updateUI();
+        });
+        discoverHostsBtn.addActionListener(e -> DiscoverHosts());
     }
 
     private void AppendColour(StringBuilder sb, Color c) {
@@ -297,10 +314,43 @@ public class RGBForm {
         sb.append(c.getBlue()).append(" ");
     }
 
-    private static void AppendColourBytes(StringBuilder sb, Color c) {
-        sb.append((char)(Math.max(1, c.getRed())))
-          .append((char)(Math.max(1, c.getGreen())))
-          .append((char)(Math.max(1, c.getBlue())));
+    private static void AppendColourBytes(char[] sb, int offset, Color c) {
+
+        int r = Math.max(1, c.getRed());
+        int g = Math.max(1, c.getGreen());
+        int b = Math.max(1, c.getBlue());
+
+        byte br = (byte)r;
+        byte bg = (byte)g;
+        byte bb = (byte)b;
+
+        char tmpr = (char)r;
+        char tmpg = (char)g;
+        char tmpb = (char)b;
+
+        char cr = (char)br;
+        char cg = (char)bg;
+        char cb = (char)bb;
+
+        {
+            String test = "";
+            test += br;
+            System.out.println("Red: " + test + ", " + test.length());
+        }
+        {
+            String test = "";
+            test += bg;
+            System.out.println("Green: " + test + ", " + test.length());
+        }
+        {
+            String test = "";
+            test += bb;
+            System.out.println("Blue: " + test + ", " + test.length());
+        }
+
+        sb[offset + 0] = cr;
+        sb[offset + 1] = cg;
+        sb[offset + 2] = cb;
     }
 
 
@@ -330,36 +380,148 @@ public class RGBForm {
         SetEnabledHierarchy(enabledOnly, true);
     }
 
-    public void executePost(String targetURL, String urlParameters) throws IOException {
+    public void executePost(String targetURL, char[] urlParameters) throws IOException {
         System.out.println("Sending payload to " + targetURL);
-        for(char c : urlParameters.toCharArray()) {
-            System.out.println((byte)c + ", " + c);
-        }
-        new Thread(() -> {
+        new Thread(() -> ExecutePost_ThreadProcess(targetURL, urlParameters)).start();
+    }
+
+    private byte[] BuildByteBuffer(char[] payload) {
+        byte[] buffer = new byte[payload.length];
+        for (int i = 0; i < payload.length; i++)
+            buffer[i] = (byte) payload[i];
+        return buffer;
+    }
+
+    private void ExecutePost_ThreadProcess(String targetUrl, char[] payload) {
+        byte[] buffer = BuildByteBuffer(payload);
+        if(USE_TCP) {
             try {
-                Socket skt = new Socket(targetURL, 3300);
+                Socket skt = new Socket(targetUrl, PORT);
                 DataOutputStream out = new DataOutputStream(skt.getOutputStream());
-                out.writeBytes(urlParameters);
+                out.write(buffer, 0, buffer.length);
                 skt.close();
             } catch (IOException e) {
                 e.printStackTrace();
             }
-        }).start();
+        }else{
+            try {
+                String[] ipSegs = targetUrl.split("\\.");
+                byte[] ip = new byte[4];
+                for(int i = 0; i < ip.length; i++)
+                    ip[i] = (byte) Integer.parseInt(ipSegs[i].trim());
+                InetAddress addr = InetAddress.getByAddress(ip);
+                DatagramPacket pkt = new DatagramPacket(buffer, buffer.length, addr, PORT);
+                DatagramSocket skt = new DatagramSocket();
+                skt.send(pkt);
+            } catch (IOException | IndexOutOfBoundsException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public void SendCommandPayload(String target, CommandPayload payload) throws IOException {
-        String prepared = payload.prepare();
+        System.out.println(payload.toString());
+        char[] prepared = payload.prepare();
         System.out.println(prepared);
         executePost(target, prepared);
     }
 
     public void SendCommandPayload(CommandPayload payload) throws IOException {
-        SendCommandPayload(hostField.getText(), payload);
+        int tabIndex = TabControl.getSelectedIndex();
+        switch(tabIndex) {
+            case 0: return; // Serial
+            case 1:         // Ethernet
+                SendCommandPayload(hostField.getText(), payload);
+                return;
+            case 2:         // Discovered
+                discoveredHostList.getSelectedValuesList().forEach(wrapper -> {
+                    try {
+                        SendCommandPayload(wrapper.address.toString().substring(1), payload);
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
+                return;
+        }
     }
 
-    public ArrayList<InetAddress> DiscoverHosts() {
-        ArrayList<InetAddress> addrs = new ArrayList<>();
-        return addrs;
+    private void AddHost(InetAddress address) {
+        AddHost(new InetAddressWrapper(address));
+    }
+    private void AddHost(InetAddress address, boolean broadcast) {
+        AddHost(new InetAddressWrapper(address, broadcast));
+    }
+
+    private void AddHost(InetAddressWrapper wrapper) {
+        // Manual Set::Contains
+//        if(discoveredHosts.contains(wrapper)) {
+//            System.out.printf("Duplicate address [%s] detected, ignoring...\n", wrapper.address);
+//            return;
+//        }
+
+        InetAddressWrapper[] items = new InetAddressWrapper[discoveredHosts.size()];
+        discoveredHosts.toArray(items);
+        for (InetAddressWrapper item : items) {
+            if(item.equals(wrapper)) {
+                System.out.printf("Duplicate address [%s] detected, ignoring...\n", wrapper.address);
+                return;
+            }
+        }
+
+        discoveredHosts.add(wrapper);
+        DefaultListModel<InetAddressWrapper> model = (DefaultListModel<InetAddressWrapper>)discoveredHostList.getModel();
+        model.addElement(wrapper);
+    }
+
+    public void DiscoverHosts() {
+        java.util.List<InetAddress> localAddrs = Utils.LocalInterfaceBroadcasts();
+        localAddrs.stream().filter(Objects::nonNull).forEach(localAddr -> {
+            AddHost(localAddr, true);
+            Thread t = new Thread(() -> {
+                try {
+                    DiscoverHosts_ThreadProcess(localAddr);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            });
+            t.start();
+        });
+    }
+
+    private void DiscoverHosts_ThreadProcess(InetAddress addr) throws IOException {
+        CommandPayload cmdPayload = new CommandPayload(BaseCommand.CMD_DISCOVERY);
+        char[] payload = cmdPayload.prepare();
+
+        byte[] buffer = BuildByteBuffer(payload);
+        DatagramPacket pkt = new DatagramPacket(buffer, buffer.length, addr, PORT);
+        DatagramSocket skt = new DatagramSocket();
+        skt.send(pkt);
+        byte[] inputBuffer = new byte[10240];
+
+        skt.setSoTimeout(3000);
+        boolean socketActive = true;
+        while(socketActive) {
+            try{
+                DatagramPacket rPkt = new DatagramPacket(inputBuffer, inputBuffer.length);
+                skt.receive(rPkt);
+                System.out.println("Potential Discovery response received: ");
+                System.out.printf("\tFrom %s:%s\n", rPkt.getAddress(), rPkt.getPort());
+                String data = Utils.AssembleBytes(rPkt.getData());
+                System.out.printf("\tData: \"%s\"", data);
+                if(data.toUpperCase().startsWith("DISCOVERY_RESPONSE"))
+                    DiscoverHosts_HostDiscovered(rPkt.getAddress());
+                System.out.println();
+            }catch (SocketTimeoutException ste) {
+                System.out.println("Socket timeout");
+                socketActive = false;
+            }
+        }
+        skt.close();
+    }
+
+    private void DiscoverHosts_HostDiscovered(InetAddress address) {
+        System.out.println("Host discovered at " + address);
+        AddHost(address, false);
     }
 
     private void Tick() {
@@ -386,41 +548,67 @@ public class RGBForm {
         public byte commandId;
         public Color colours[] = new Color[4];
         public short wait = 50;
-        public boolean pinMask[] = new boolean[PIXELCOUNT];
 
         public CommandPayload(byte commandId) {
             this.commandId = commandId;
             for(int i = 0; i < colours.length; i++)
                 colours[i] = new Color(Color.WHITE.getRGB());
-            for(int i = 0; i < pinMask.length; i++)
-                pinMask[i] = false;
         }
         public void SetWait(short wait) {
             this.wait = wait;
-        }
-
-        public void SetPinMask(boolean state, int... pins) {
-            for (int pin : pins) {
-                if(pin < 0 || pin > pinMask.length) continue;
-                pinMask[pin] = state;
-            }
         }
         public void SetColour(int id, int r, int g, int b) {
             if(id < 0 || id > colours.length) return;
             colours[id] = new Color(r, g, b);
         }
 
-        public String prepare() {
-            StringBuilder sb = new StringBuilder();
-            sb.append((char)commandId);
+        @Override
+        public String toString() {
+            return String.format("ID: %s, Wait: %s, Colours: {\n\t1: %s,\n\t2: %s, \n\t3: %s, \n\t4: %s \n}", commandId, wait, colours[0], colours[1], colours[2], colours[3]);
+        }
+
+        public char[] prepare() {
+            char[] sb = new char[14];
+            sb[0] = (char)commandId;
             for (int i = 0; i < colours.length; i++)
-                AppendColourBytes(sb, colours[i]);
-            for (int i = 0; i < pinMask.length; i++)
-                sb.append(pinMask[i] ? '1' : '0');
-            sb.append('\n');
-            return sb.toString();
+                AppendColourBytes(sb, (i * 3) + 1, colours[i]);
+            sb[13] = '\0';
+            return sb;
         }
 
     };
+
+    public static class InetAddressWrapper {
+
+        public InetAddressWrapper(InetAddress address) {
+            this(address, false);
+        }
+
+        public InetAddressWrapper(InetAddress address, boolean broadcast) {
+            this.address = address;
+            this.broadcast = broadcast;
+        }
+
+        public InetAddress address;
+        public boolean broadcast;
+
+        @Override
+        public String toString() {
+            String body = address.toString();
+            if(broadcast)
+                body = "[B] " + body;
+            return body;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if(obj == this) return true;
+            if(obj instanceof InetAddressWrapper) {
+                if(address.equals(((InetAddressWrapper) obj).address)) return true;
+            }
+            if(address.equals(obj)) return true;
+            return super.equals(obj);
+        }
+    }
 
 }

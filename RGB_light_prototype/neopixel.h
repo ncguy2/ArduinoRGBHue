@@ -94,6 +94,19 @@ public:
     }
   }
 
+  void TwinFill_Same(INT32 colour, INT8 wait) {
+    TwinFill(colour, colour, wait);
+  }
+
+    void TwinFill(INT32 colLeft, INT32 colRight, INT8 wait) {
+      for(INT8 i = 0; i < pixelCount * 0.5f; i++) {
+        strip.setPixelColor(i, colLeft);
+        strip.setPixelColor((pixelCount-1)-i, colRight);
+        strip.show();
+        delay(wait);
+      }
+    }
+
   void ColourWorm(RGB colour, INT8 len, INT8 wait) {
     if(len <= 0) len = 1;
     float diff = 0.f;

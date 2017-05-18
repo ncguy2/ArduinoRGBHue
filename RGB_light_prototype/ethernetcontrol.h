@@ -7,6 +7,7 @@
 
 #include <SPI.h>
 #include <Ethernet.h>
+#include <EthernetUdp.h>
 byte mac[] = { MAC_ADDRESS };
 IPAddress ip(IP_ADDRESS);
 IPAddress myDns(DNS_ADDRESS);
@@ -24,13 +25,18 @@ IPAddress subnet(SUBNET_ADDRESS);
 #define CMD_DUALWIPE 6
 #define CMD_TRIWIPE 7
 #define CMD_QUADWIPE 8
+#define CMD_TWIN_WIPE_SINGLE 9
+#define CMD_TWIN_WIPE 10
 
-#define CMD_INSTRUCTION_START 10
-#define CMD_INSTRUCTION_WORM 11
-#define CMD_INSTRUCTION_DUALWIPE 12
-#define CMD_INSTRUCTION_TRIWIPE 13
-#define CMD_INSTRUCTION_QUADWIPE 14
-#define CMD_INSTRUCTION_END 15
+#define CMD_INSTRUCTION_START 30
+#define CMD_INSTRUCTION_WORM 31
+#define CMD_INSTRUCTION_DUALWIPE 32
+#define CMD_INSTRUCTION_TRIWIPE 33
+#define CMD_INSTRUCTION_QUADWIPE 34
+#define CMD_INSTRUCTION_BREATHING 35
+#define CMD_INSTRUCTION_END 36
+
+#define CMD_DISCOVERY 127
 
 #endif
 
@@ -38,9 +44,6 @@ struct CommandPayload {
   byte commandId;
   RGB colours[4];
   unsigned int wait;
-  bool pinMask[NEOPIXEL_PIXELS];
-  int pins[NEOPIXEL_PIXELS];
-  int maskedPins = 0;
 };
 
 template<typename T, typename U>
@@ -51,81 +54,118 @@ struct pair {
 
 class EthernetControl {
 public:
-  EthernetControl(String cellName) : cellName(cellName), svr(ETHERNET_PORT) {}
+    #if USE_UDP
+  EthernetControl(String cellName) : cellName(cellName), svr() {}
+    #else
+    EthernetControl(String cellName) : cellName(cellName), svr(ETHERNET_PORT) {}
+    #endif
   void Init() {
+    pinMode(DEBUG_DHCP_SUCCESS, OUTPUT);
+    pinMode(DEBUG_DHCP_WORKING, OUTPUT);
+    pinMode(DEBUG_DHCP_FAIL, OUTPUT);
+
+
+
+    digitalWrite(DEBUG_DHCP_SUCCESS, LOW);
+    digitalWrite(DEBUG_DHCP_WORKING, HIGH);
+    digitalWrite(DEBUG_DHCP_FAIL, LOW);
     // DHCP
     Serial.println("Attempting to connect through DHCP");
     if(Ethernet.begin(mac) == 0) {
-      Serial.println("Failed to configure Ethernet using DHCP");
-      Ethernet.begin(mac, ip, myDns, gateway, subnet);
-      Serial.println("Using default network settings");
-    }
+      OnDHCPConnectionFail();
+    }else OnDHCPConnectionSuccess();
+    #if USE_UDP
+    svr.begin(ETHERNET_PORT);
+    #else
     svr.begin();
+    #endif
     Serial.print("Server address: ");
     Serial.println(Ethernet.localIP());
   }
 
-  bool IsAvailable() {
+  void OnDHCPConnectionSuccess() {
+    digitalWrite(DEBUG_DHCP_SUCCESS, HIGH);
+    digitalWrite(DEBUG_DHCP_WORKING, LOW);
+    digitalWrite(DEBUG_DHCP_FAIL, LOW);
+  }
+  void OnDHCPConnectionFail() {
+    Serial.println("Failed to configure Ethernet using DHCP");
+    Ethernet.begin(mac, ip, myDns, gateway, subnet);
+    Serial.println("Using default network settings");
+
+    digitalWrite(DEBUG_DHCP_SUCCESS, LOW);
+    digitalWrite(DEBUG_DHCP_WORKING, LOW);
+    digitalWrite(DEBUG_DHCP_FAIL, HIGH);
+  }
+
+    bool IsAvailable() {
     this->request = "";
+
+    #if USE_UDP
+    int packetSize = svr.parsePacket();
+    if(packetSize <= 0) return false;
+    this->request = svr.readStringUntil('\0');
+    #else
     EthernetClient client = svr.available();
     if(!client) return false;
     this->request = ReadRequest(&client);
-    Serial.println("REQUEST_RECEIVED");
-    Serial.println(this->request);
+    #endif
     this->payload = AssembleCommandPayload(this->request);
-    return !ExecuteRequest(&client);
-  }  
+    bool consumed = ExecuteRequest();
+    if(consumed)
+      Serial.println("Request consumed by system, command ID: " + this->payload.commandId);
+    return !consumed;
+
+  }
   /**
    * @returns Whether the request was consumed
    */
-  bool ExecuteRequest(EthernetClient* client) {
-    
+  bool ExecuteRequest() {
+    bool isDiscovery = this->payload.commandId == CMD_DISCOVERY;
+    Serial.print("Debug: ");
+    Serial.print(this->payload.commandId);
+    Serial.print(" == ");
+    Serial.print(CMD_DISCOVERY);
+    Serial.print(" = ");
+    Serial.println(isDiscovery);
+    if(isDiscovery) {
+      Serial.print("Discovery packet received ");
+      IPAddress remote = svr.remoteIP();
+      int remotePort = svr.remotePort();
+      Serial.print("from ");
+      Serial.print(remote);
+      Serial.print(":");
+      Serial.println(remotePort);
+      Serial.println("DISCOVERY_RESPONSE");
+      svr.beginPacket(remote, remotePort);
+      svr.write("DISCOVERY_RESPONSE");
+      int result = svr.endPacket();
+      Serial.print("Response status: ");
+      Serial.print(result == 1 ? "Success" : "Failed");
+      Serial.print(" [");
+      Serial.print(result);
+      Serial.println("]");
+      return true;
+    }
     return false;
   }
 
-  int& MaskToValueSize(CommandPayload& payload) {
-    int size = 0;
-    for(int i = 0; i < NEOPIXEL_PIXELS; i++) {
-      if(payload.pinMask[i])
-        size++;
-    }
-    return size;
-  }
-
-  INT8* MaskToValues(CommandPayload& payload, int size) {
-    uint8_t values[size];
-    int index = 0;
-    for(int i = 0; i < NEOPIXEL_PIXELS; i++) {
-      if(payload.pinMask[i])
-        values[index++] = i;
-    }
-    return values;
-  }
-
   void ExecuteNeoPixel(NeoPixel& neopixel) {
+    Serial.print("Command ID: ");
+    Serial.println(payload.commandId);
     if(payload.commandId < CMD_INSTRUCTION_START || payload.commandId > CMD_INSTRUCTION_END)
       InstructionManager::GetInstance().ClearInstruction();
     switch(payload.commandId) {
       case CMD_SET:
-        for(int i = 0; i < payload.maskedPins; i++)
-          neopixel.SetPixelColour_fast(payload.pins[i], payload.colours[0].ToLong());
-        neopixel.ShowRing(payload.wait);
+        neopixel.SetRingColour(payload.colours[0].ToLong(), payload.wait);
         break;
       case CMD_PULSE:
         neopixel.SetRingColour(payload.colours[0].ToLong(), payload.wait);
         neopixel.SetRingColour(payload.colours[1].ToLong(), 0);
         break;
-      case CMD_PULSEMASK:
-        for(int i = 0; i < payload.maskedPins; i++)
-          neopixel.SetPixelColour_fast(payload.pins[i], payload.colours[0].ToLong());
-        neopixel.ShowRing(payload.wait);
-        for(int i = 0; i < payload.maskedPins; i++)
-          neopixel.SetPixelColour_fast(payload.pins[i], payload.colours[1].ToLong());
-        neopixel.ShowRing(0);
-        break;
       case CMD_SWEEP:
-        for(int i = 0; i < payload.maskedPins; i++)
-          neopixel.SetPixelColour(payload.pins[i], payload.colours[0].ToLong(), payload.wait);
+        for(int i = 0; i < NEOPIXEL_PIXELS; i++)
+          neopixel.SetPixelColour(i, payload.colours[0].ToLong(), payload.wait);
         break;
       case CMD_WIPE:
         neopixel.ColourWipe(payload.colours[0].ToLong(), payload.wait);
@@ -139,6 +179,12 @@ public:
       case CMD_QUADWIPE:
         neopixel.QuadWipe(payload.colours[0].ToLong(), payload.colours[1].ToLong(), payload.colours[2].ToLong(), payload.colours[3].ToLong(), payload.wait);
         break;
+      case CMD_TWIN_WIPE_SINGLE:
+        neopixel.TwinFill_Same(payload.colours[0].ToLong(), payload.wait);
+        break;
+      case CMD_TWIN_WIPE:
+        neopixel.TwinFill(payload.colours[0].ToLong(), payload.colours[1].ToLong(), payload.wait);
+        break;
       case CMD_INSTRUCTION_WORM:
         InstructionManager::GetInstance().SetInstruction(new WormSpinInstruction(payload.colours[0].ToLong(), payload.colours[1].ToLong(), payload.colours[2].r, payload.wait));
         break;
@@ -151,6 +197,9 @@ public:
       case CMD_INSTRUCTION_QUADWIPE:
         InstructionManager::GetInstance().SetInstruction(new QuadWipeInstruction(payload.colours[0].ToLong(), payload.colours[1].ToLong(), payload.colours[2].ToLong(), payload.colours[3].ToLong(), payload.wait));
         break;
+      case CMD_INSTRUCTION_BREATHING:
+        InstructionManager::GetInstance().SetInstruction(new BreathingInstruction(payload.colours[0], payload.colours[1].r));
+        break;
       default:
         Serial.print("Unrecognised command, ID: ");
         Serial.println(payload.commandId);
@@ -160,32 +209,35 @@ public:
 
   CommandPayload AssembleCommandPayload(String& request) {
     unsigned int bufSize = request.length();
-    int buf[bufSize+1];
-    char byteBuf[bufSize+1];
-    request.toCharArray(byteBuf, bufSize+1);
+    int buf[bufSize];
+    byte byteBuf[bufSize];
+    request.getBytes(byteBuf, bufSize);
 
     for(int i = 0; i < bufSize; i++)
       buf[i] = byteBuf[i];
 
     CommandPayload payload;
     payload.commandId = (byte)buf[0];
-    payload.colours[0] = RGB(buf[1] - 1,  buf[2] - 1,  buf[3] - 1);
-    payload.colours[1] = RGB(buf[4] - 1,  buf[5] - 1,  buf[6] - 1);
-    payload.colours[2] = RGB(buf[7] - 1,  buf[8] - 1,  buf[9] - 1);
-    payload.colours[3] = RGB(buf[10] - 1, buf[11] - 1, buf[12] - 1);
+    payload.colours[0] = RGB(buf[1] ,  buf[2] ,  buf[3] );
+    payload.colours[1] = RGB(buf[4] ,  buf[5] ,  buf[6] );
+    payload.colours[2] = RGB(buf[7] ,  buf[8] ,  buf[9] );
+    payload.colours[3] = RGB(buf[10] , buf[11] , buf[12] );
+
+    for(int i = 0; i < 4; i++) {
+      payload.colours[i].r -= 1;
+      payload.colours[i].g -= 1;
+      payload.colours[i].b -= 1;
+    }
 
     payload.wait = 50;
 
-    for(int i = 0; i < NEOPIXEL_PIXELS; i++) {
-      payload.pinMask[i] = ((char) buf[13 + i]) == '1';
-      if(payload.pinMask[i]) {
-        payload.pins[payload.maskedPins++] = i;
-      }
-    }
-
   #if VERBOSE_LOG
+    Serial.print("Request: ");
+    Serial.println(request);
     Serial.println("Buffer:");
     for(int i = 0; i < bufSize; i++) {
+      Serial.print(i);
+      Serial.print(": ");
       Serial.print("  ");
       Serial.print((byte)buf[i]);
       Serial.print(" / ");
@@ -232,36 +284,34 @@ public:
     Serial.print(buf[12]);
     Serial.print(" / ");
     Serial.println(payload.colours[3].ToLong());
-    Serial.println("    PinMask: ");
-    for(int i = 0; i < NEOPIXEL_PIXELS; i++) {
-      Serial.print("        ");
-      Serial.print(i);
-      Serial.print(": ");
-      Serial.print(buf[13 + i]);
-      Serial.print(" / ");
-      Serial.println(payload.pinMask[i]);
-    }
   #endif
     return payload;
   }
 
+    #if !USE_UDP
   String ReadRequest(EthernetClient* client) {
     String request = "";
     while(client->connected()) {
       while(client->available()) {
         char c = client->read();
-        if(c == '\n') return request;
+        if(c == '\0') return request;
         request += c;
       }
     }
     return request;
   }
+    #endif
   
 protected:
   long lastSent;
   String cellName;
   String request;
+  #if USE_UDP
+  EthernetUDP svr;
+  #else
   EthernetServer svr;
+  #endif
+
   CommandPayload payload;
 };
 

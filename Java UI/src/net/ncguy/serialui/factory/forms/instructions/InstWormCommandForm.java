@@ -1,7 +1,6 @@
-package net.ncguy.serialui.factory.forms;
+package net.ncguy.serialui.factory.forms.instructions;
 
 import net.ncguy.serialui.RGBForm;
-import net.ncguy.serialui.cmd.DualWipeCommand;
 import net.ncguy.serialui.cmd.InstWormCommand;
 
 import javax.swing.*;

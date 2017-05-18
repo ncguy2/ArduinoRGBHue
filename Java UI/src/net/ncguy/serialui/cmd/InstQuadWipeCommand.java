@@ -15,7 +15,7 @@ public class InstQuadWipeCommand implements BaseCommand {
 
     @Override
     public RGBForm.CommandPayload PreparePayload(int[] data) {
-        RGBForm.CommandPayload payload = new RGBForm.CommandPayload(CMD_INSTRUCTION_WORM);
+        RGBForm.CommandPayload payload = new RGBForm.CommandPayload(CMD_INSTRUCTION_QUADWIPE);
         payload.colours[0] = new Color(data[0], data[1], data[2]);
         payload.colours[1] = new Color(data[3], data[4], data[5]);
         payload.colours[2] = new Color(data[6], data[7], data[8]);
